@@ -1,27 +1,81 @@
-# 🖥️ โปรแกรมจำลองการจัดคิวซีพียูแบบ MLFQ (MLFQ CPU Scheduling Simulator)
+# OS-Project: Multi-Level Feedback Queue (MLFQ) CPU Scheduler
 
-โปรแกรมจำลองการทำงานของอัลกอริทึมจัดคิวซีพียูแบบ **Multi-Level Feedback Queue (MLFQ)** พัฒนาด้วยภาษา C โครงการนี้แสดงให้เห็นถึงกลไกการจัดคิวของระบบปฏิบัติการสมัยใหม่ เช่น การปรับเปลี่ยนระดับความสำคัญแบบไดนามิก, การจัดการโควตาเวลา (Time Quantum) และระบบป้องกันโปรแกรมอดตาย (Starvation Prevention)
+โปรแกรมจำลองการทำงานของระบบจัดคิวซีพียูแบบ Multi-Level Feedback Queue (MLFQ)
+จัดทำขึ้นเพื่อศึกษาแนวคิดเกี่ยวกับการจัดคิวประมวลผลและการบริหารจัดการทรัพยากร CPU ในระบบปฏิบัติการ (Operating System)
 
-## 📌 คุณสมบัติหลัก (Core Features)
+## เทคโนโลยีที่ใช้
 
-* **โครงสร้างคิว 3 ระดับ (3-Tier Queue Architecture):**
-  * **คิวระดับที่ 1 (ความสำคัญสูงสุด):** จัดคิวแบบ Round Robin กำหนดโควตาเวลา (Time Quantum) = 2 หน่วยเวลา
-  * **คิวระดับที่ 2 (ความสำคัญปานกลาง):** จัดคิวแบบ Round Robin กำหนดโควตาเวลา (Time Quantum) = 4 หน่วยเวลา
-  * **คิวระดับที่ 3 (ความสำคัญต่ำสุด):** จัดคิวแบบมาก่อนได้ก่อน First-Come First-Served (FCFS) สำหรับงานประมวลผลระยะยาว
-* **การลดระดับความสำคัญ (Dynamic Demotion):** โปรแกรมที่ใช้โควตาเวลาในคิวนั้น ๆ จนหมด จะถูกลดระดับความสำคัญไปยังคิวที่ต่ำกว่าโดยอัตโนมัติ เพื่อเปิดโอกาสให้โปรแกรมอื่นได้ใช้งาน CPU
-* **ระบบป้องกันการอดตาย (Aging Mechanism):** เพื่อป้องกันไม่ให้โปรแกรมที่ใช้เวลานานในคิวระดับต่ำสุดถูกทิ้งให้อดตาย (Starvation) ระบบจะทำการดึงทุกโปรแกรมที่กำลังทำงานอยู่ กลับขึ้นไปยังคิวระดับที่ 1 เสมอ เมื่อเวลาผ่านไปทุก ๆ 20 หน่วยเวลา
-* **การประเมินประสิทธิภาพ (Performance Metrics):** ระบบจะคำนวณและสรุปรายงานผลลัพธ์ของ เวลาที่ใช้จนเสร็จ (Completion Time), เวลาตอบสนองรวม (Turnaround Time) และ เวลารอคอย (Waiting Time) ของแต่ละโปรแกรม
+* C Language
+* GCC (GNU Compiler Collection)
+* Linux / WSL (Windows Subsystem for Linux)
+* Git
 
-## 📁 โครงสร้างไฟล์ในโปรเจกต์ (Repository Structure)
+## สิ่งที่ต้องติดตั้งก่อนใช้งาน
 
-* `mlfq.c`: ไฟล์โค้ดต้นฉบับภาษา C ซึ่งประกอบด้วยตรรกะของระบบจำลอง
-* `README.md`: ไฟล์เอกสารอธิบายโปรเจกต์และวิธีการใช้งาน
+ก่อนเริ่มใช้งานต้องติดตั้งโปรแกรมต่อไปนี้ในเครื่อง:
 
-## 🚀 วิธีการคอมไพล์และรันโปรแกรม
+* GCC Compiler
+* Git
 
-### 1. สิ่งที่ต้องเตรียม (Prerequisites)
-เครื่องคอมพิวเตอร์ของคุณต้องติดตั้ง C compiler (`gcc`) 
-สำหรับผู้ใช้งาน Ubuntu, Debian หรือ WSL (บน Windows) สามารถติดตั้งได้ด้วยคำสั่ง:
+ตรวจสอบว่าติดตั้งเรียบร้อยแล้วด้วยคำสั่ง:
+
+```bash
+gcc --version
+git --version
+```
+
+หากใช้ Ubuntu หรือ WSL แล้วยังไม่มีเครื่องมือดังกล่าว สามารถติดตั้งได้ด้วยคำสั่ง:
+
 ```bash
 sudo apt update
-sudo apt install build-essential
+sudo apt install build-essential git
+```
+
+## วิธี Clone และรันโปรเจกต์
+
+```bash
+# Clone โปรเจกต์
+git clone [https://github.com/ZAG1A/OS-Project.git](https://github.com/ZAG1A/OS-Project.git)
+
+# เข้าสู่โฟลเดอร์โปรเจกต์
+cd OS-Project
+
+# คอมไพล์โปรแกรม
+gcc mlfq.c -o mlfq
+
+# รันโปรแกรม
+./mlfq
+```
+
+## โครงสร้างโปรเจกต์
+
+```text
+OS-Project/
+├── mlfq.c        # ซอร์สโค้ดภาษา C ระบบจำลอง MLFQ
+└── README.md     # เอกสารอธิบายรายละเอียดโปรเจกต์
+```
+
+## คุณสมบัติและการทำงานของอัลกอริทึม
+
+* **โครงสร้างคิว 3 ระดับ (3-Tier Queue):**
+  * **Queue 1:** Round Robin (RR) กำหนดค่า Time Quantum = 2
+  * **Queue 2:** Round Robin (RR) กำหนดค่า Time Quantum = 4
+  * **Queue 3:** First-Come First-Served (FCFS) สำหรับงานประมวลผลทั่วไป
+* **การลดระดับความสำคัญ (Dynamic Demotion):** ปรับลดระดับ Process ที่ใช้เวลาในคิวปัจจุบันจนครบโควตา (Time Quantum) ลงไปคิวระดับล่าง
+* **การป้องกันการอดตาย (Aging Mechanism / Starvation Prevention):** ปรับระดับความสำคัญของ Process ทั้งหมดที่ยังทำงานไม่เสร็จ กลับขึ้นไปยัง Queue 1 ทุกๆ 20 หน่วยเวลา
+* **การประเมินประสิทธิภาพ (Performance Evaluation):** คำนวณและแสดงผลค่า Completion Time, Turnaround Time และ Waiting Time ของแต่ละ Process พร้อมสรุปค่าเฉลี่ยของระบบ
+
+## ตัวอย่างผลลัพธ์การทำงาน
+
+```text
+================ Summary Report ================
+Process Arrival Burst   Completion      Turnaround      Waiting
+P1      0       8       20              20              12
+P2      1       4       14              13              9
+P3      2       9       23              21              12
+P4      4       2       8               4               2
+------------------------------------------------
+Average Waiting Time: 8.75
+Average Turnaround Time: 14.50
+================================================
+```
