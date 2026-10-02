@@ -1,131 +1,275 @@
 #include <stdio.h>
-#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define MAX_PROCESS 4
-#define QUANTUM_Q1 2
-#define QUANTUM_Q2 4
-#define AGING_TIME 20  // Aging: Move all active processes back to Queue 1 every 20 time units
+#define MAX_PROCESSES 100
+#define MAX_NAME_LEN 16
+#define MAX_TIMELINE 1000
 
 typedef struct {
-    int id;
+    char name[MAX_NAME_LEN];
     int arrival_time;
     int burst_time;
     int remaining_time;
-    int queue_level;     // Queue level: 1, 2, or 3
+    int current_queue; // คิวปัจจุบัน (1, 2, หรือ 3)
+    int quantum_used;  // เวลาที่ใช้ไปในคิวปัจจุบัน
     int completion_time;
-    int waiting_time;
     int turnaround_time;
-    bool is_completed;
+    int waiting_time;
+    int is_completed;
 } Process;
 
+// โครงสร้างคิวแบบ FIFO / Round Robin
+typedef struct {
+    int items[MAX_PROCESSES];
+    int front;
+    int rear;
+    int count;
+} Queue;
+
+void initQueue(Queue *q) {
+    q->front = 0;
+    q->rear = -1;
+    q->count = 0;
+}
+
+int isEmpty(Queue *q) {
+    return q->count == 0;
+}
+
+void enqueue(Queue *q, int value) {
+    if (q->count < MAX_PROCESSES) {
+        q->rear = (q->rear + 1) % MAX_PROCESSES;
+        q->items[q->rear] = value;
+        q->count++;
+    }
+}
+
+int dequeue(Queue *q) {
+    if (!isEmpty(q)) {
+        int item = q->items[q->front];
+        q->front = (q->front + 1) % MAX_PROCESSES;
+        q->count--;
+        return item;
+    }
+    return -1;
+}
+
+int inQueue(Queue *q, int index) {
+    if (isEmpty(q)) return 0;
+    for (int i = 0; i < q->count; i++) {
+        int idx = (q->front + i) % MAX_PROCESSES;
+        if (q->items[idx] == index) return 1;
+    }
+    return 0;
+}
+
 int main() {
-    // Sample test processes: {id, arrival, burst, remaining, queue, completion, wait, turnaround, is_completed}
-    Process p[MAX_PROCESS] = {
-        {1, 0, 8, 8, 1, 0, 0, 0, false},
-        {2, 1, 4, 4, 1, 0, 0, 0, false},
-        {3, 2, 9, 9, 1, 0, 0, 0, false},
-        {4, 4, 2, 2, 1, 0, 0, 0, false}
-    };
+    int num_processes;
+    int q1_quantum, q2_quantum, aging_time;
 
-    int current_time = 0;
-    int completed_processes = 0;
-    int current_quantum = 0;
-    int active_process = -1;
+    printf("==================================================\n");
+    printf("   MLFQ CPU SCHEDULER SIMULATOR (DYNAMIC INPUT)   \n");
+    printf("==================================================\n\n");
 
-    printf("=== MLFQ CPU Scheduler Simulation Started ===\n\n");
+    // 1. รับค่า Parameter ของระบบ
+    printf("Enter number of processes: ");
+    if (scanf("%d", &num_processes) != 1 || num_processes <= 0) {
+        printf("Invalid number of processes.\n");
+        return 1;
+    }
 
-    while (completed_processes < MAX_PROCESS) {
-        // 1. AGING SYSTEM (Prevent Starvation)
-        if (current_time > 0 && current_time % AGING_TIME == 0) {
-            printf("[Time %2d] *** AGING BOOST: Moving all active processes back to Queue 1 ***\n", current_time);
-            for (int i = 0; i < MAX_PROCESS; i++) {
-                if (!p[i].is_completed && p[i].arrival_time <= current_time) {
-                    p[i].queue_level = 1;
+    printf("Enter Time Quantum for Queue 1 (e.g., 2): ");
+    scanf("%d", &q1_quantum);
+
+    printf("Enter Time Quantum for Queue 2 (e.g., 4): ");
+    scanf("%d", &q2_quantum);
+
+    printf("Enter Aging Interval Time (e.g., 20): ");
+    scanf("%d", &aging_time);
+
+    Process procs[MAX_PROCESSES];
+
+    // 2. รับข้อมูล Process ทีละตัว
+    printf("\n--- Enter Process Details ---\n");
+    for (int i = 0; i < num_processes; i++) {
+        printf("Process %d (Name Arrival Burst) [e.g. P%d %d %d]: ", i + 1, i + 1, i, (i + 1) * 3);
+        scanf("%s %d %d", procs[i].name, &procs[i].arrival_time, &procs[i].burst_time);
+        procs[i].remaining_time = procs[i].burst_time;
+        procs[i].current_queue = 1;
+        procs[i].quantum_used = 0;
+        procs[i].completion_time = 0;
+        procs[i].turnaround_time = 0;
+        procs[i].waiting_time = 0;
+        procs[i].is_completed = 0;
+    }
+
+    printf("\n==================================================\n");
+    printf("          MLFQ CPU Scheduler Simulation           \n");
+    printf("==================================================\n");
+
+    Queue q1, q2, q3;
+    initQueue(&q1);
+    initQueue(&q2);
+    initQueue(&q3);
+
+    int time = 0;
+    int completed = 0;
+    int current_idx = -1;
+
+    char timeline_proc[MAX_TIMELINE][MAX_NAME_LEN];
+    int timeline_len = 0;
+
+    // 3. เริ่มจำลองการทำงาน
+    while (completed < num_processes) {
+        // กลไก Aging: ปรับ Process ทั้งหมดกลับ Queue 1 เมื่อถึงเวลาที่กำหนด
+        if (time > 0 && time % aging_time == 0) {
+            printf("[Time %2d] *** AGING BOOST: Moving all active processes back to Queue 1 ***\n", time);
+            
+            Queue new_q1;
+            initQueue(&new_q1);
+
+            if (current_idx != -1 && procs[current_idx].remaining_time > 0) {
+                procs[current_idx].current_queue = 1;
+                procs[current_idx].quantum_used = 0;
+                enqueue(&new_q1, current_idx);
+                current_idx = -1;
+            }
+
+            while (!isEmpty(&q1)) {
+                int idx = dequeue(&q1);
+                procs[idx].quantum_used = 0;
+                enqueue(&new_q1, idx);
+            }
+            while (!isEmpty(&q2)) {
+                int idx = dequeue(&q2);
+                procs[idx].current_queue = 1;
+                procs[idx].quantum_used = 0;
+                enqueue(&new_q1, idx);
+            }
+            while (!isEmpty(&q3)) {
+                int idx = dequeue(&q3);
+                procs[idx].current_queue = 1;
+                procs[idx].quantum_used = 0;
+                enqueue(&new_q1, idx);
+            }
+
+            q1 = new_q1;
+            initQueue(&q2);
+            initQueue(&q3);
+        }
+
+        // เช็ค Process ใหม่ที่เพิ่งเข้ามา ณ เวลาปัจจุบัน
+        for (int i = 0; i < num_processes; i++) {
+            if (procs[i].arrival_time == time && !procs[i].is_completed && i != current_idx) {
+                if (!inQueue(&q1, i) && !inQueue(&q2, i) && !inQueue(&q3, i)) {
+                    enqueue(&q1, i);
                 }
             }
         }
 
-        // 2. PRIORITY DISPATCHER (Queue 1 -> Queue 2 -> Queue 3)
-        int selected = -1;
-        for (int q = 1; q <= 3; q++) {
-            for (int i = 0; i < MAX_PROCESS; i++) {
-                if (!p[i].is_completed && p[i].arrival_time <= current_time && p[i].queue_level == q) {
-                    selected = i;
-                    break;
-                }
+        // ดึง Process จากคิวลำดับความสำคัญสูงสุด
+        if (current_idx == -1) {
+            if (!isEmpty(&q1)) {
+                current_idx = dequeue(&q1);
+            } else if (!isEmpty(&q2)) {
+                current_idx = dequeue(&q2);
+            } else if (!isEmpty(&q3)) {
+                current_idx = dequeue(&q3);
             }
-            if (selected != -1) break;
         }
 
-        // If no process is ready, CPU enters Idle state
-        if (selected == -1) {
-            printf("[Time %2d] CPU Idle...\n", current_time);
-            current_time++;
+        // กรณีไม่มี Process ในคิวเลย (CPU Idle)
+        if (current_idx == -1) {
+            printf("[Time %2d] CPU Idle\n", time);
+            if (timeline_len < MAX_TIMELINE) {
+                strcpy(timeline_proc[timeline_len++], "IDLE");
+            }
+            time++;
             continue;
         }
 
-        // Reset quantum if CPU switches to another process
-        if (active_process != selected) {
-            active_process = selected;
-            current_quantum = 0;
+        // ประมวลผล Process ปัจจุบัน
+        printf("[Time %2d] Running Process %s (Remaining: %d) [In Queue %d]\n",
+               time, procs[current_idx].name, procs[current_idx].remaining_time, procs[current_idx].current_queue);
+
+        if (timeline_len < MAX_TIMELINE) {
+            strcpy(timeline_proc[timeline_len++], procs[current_idx].name);
         }
 
-        // 3. CPU EXECUTION (1 Time Unit)
-        p[selected].remaining_time--;
-        current_quantum++;
-        
-        printf("[Time %2d] Running Process P%d (Remaining: %d) [In Queue %d]\n", 
-               current_time, p[selected].id, p[selected].remaining_time, p[selected].queue_level);
+        procs[current_idx].remaining_time--;
+        procs[current_idx].quantum_used++;
+        time++;
 
-        current_time++;
+        // เช็คการเข้ามาของ Process ใหม่ ณ จังหวะสิ้นสุด 1 time tick
+        for (int i = 0; i < num_processes; i++) {
+            if (procs[i].arrival_time == time && !procs[i].is_completed && i != current_idx) {
+                if (!inQueue(&q1, i) && !inQueue(&q2, i) && !inQueue(&q3, i)) {
+                    enqueue(&q1, i);
+                }
+            }
+        }
 
-        // 4. CHECK COMPLETION STATUS
-        if (p[selected].remaining_time == 0) {
-            p[selected].is_completed = true;
-            p[selected].completion_time = current_time;
-            p[selected].turnaround_time = p[selected].completion_time - p[selected].arrival_time;
-            p[selected].waiting_time = p[selected].turnaround_time - p[selected].burst_time;
-            
-            completed_processes++;
-            printf("[Time %2d] Process P%d FINISHED!\n", current_time, p[selected].id);
-            active_process = -1;
-            current_quantum = 0;
-        } 
-        // 5. CHECK DEMOTION (Lower queue level when quantum expires)
-        else {
-            if (p[selected].queue_level == 1 && current_quantum >= QUANTUM_Q1) {
-                p[selected].queue_level = 2;
-                printf("[Time %2d] Process P%d expired Quantum Q1 -> Demoted to Queue 2\n", current_time, p[selected].id);
-                active_process = -1;
-                current_quantum = 0;
-            } 
-            else if (p[selected].queue_level == 2 && current_quantum >= QUANTUM_Q2) {
-                p[selected].queue_level = 3;
-                printf("[Time %2d] Process P%d expired Quantum Q2 -> Demoted to Queue 3\n", current_time, p[selected].id);
-                active_process = -1;
-                current_quantum = 0;
+        // เช็คว่า Process ทำงานเสร็จหรือไม่
+        if (procs[current_idx].remaining_time == 0) {
+            printf("[Time %2d] Process %s FINISHED!\n", time, procs[current_idx].name);
+            procs[current_idx].is_completed = 1;
+            procs[current_idx].completion_time = time;
+            procs[current_idx].turnaround_time = time - procs[current_idx].arrival_time;
+            procs[current_idx].waiting_time = procs[current_idx].turnaround_time - procs[current_idx].burst_time;
+            completed++;
+            current_idx = -1;
+        } else {
+            // เช็คการหมด Time Quantum (Demotion)
+            if (procs[current_idx].current_queue == 1 && procs[current_idx].quantum_used == q1_quantum) {
+                printf("[Time %2d] Process %s expired Quantum Q1 -> Demoted to Queue 2\n", time, procs[current_idx].name);
+                procs[current_idx].current_queue = 2;
+                procs[current_idx].quantum_used = 0;
+                enqueue(&q2, current_idx);
+                current_idx = -1;
+            } else if (procs[current_idx].current_queue == 2 && procs[current_idx].quantum_used == q2_quantum) {
+                printf("[Time %2d] Process %s expired Quantum Q2 -> Demoted to Queue 3\n", time, procs[current_idx].name);
+                procs[current_idx].current_queue = 3;
+                procs[current_idx].quantum_used = 0;
+                enqueue(&q3, current_idx);
+                current_idx = -1;
             }
         }
     }
 
-    // 6. SUMMARY REPORT
-    printf("\n================ Summary Report ================\n");
-    printf("Process\tArrival\tBurst\tCompletion\tTurnaround\tWaiting\n");
-    float total_wait = 0, total_turnaround = 0;
-    
-    for (int i = 0; i < MAX_PROCESS; i++) {
-        printf("P%d\t%d\t%d\t%d\t\t%d\t\t%d\n", 
-               p[i].id, p[i].arrival_time, p[i].burst_time, 
-               p[i].completion_time, p[i].turnaround_time, p[i].waiting_time);
-        
-        total_wait += p[i].waiting_time;
-        total_turnaround += p[i].turnaround_time;
+    // 4. แสดงผล Gantt Chart
+    printf("\n==================================================\n");
+    printf("                   Gantt Chart                    \n");
+    printf("==================================================\n");
+    printf("|");
+    for (int i = 0; i < timeline_len; i++) {
+        printf(" %-3s |", timeline_proc[i]);
     }
+    printf("\n0");
+    for (int i = 1; i <= timeline_len; i++) {
+        printf("     %-2d", i);
+    }
+    printf("\n");
 
-    printf("------------------------------------------------\n");
-    printf("Average Waiting Time: %.2f\n", total_wait / MAX_PROCESS);
-    printf("Average Turnaround Time: %.2f\n", total_turnaround / MAX_PROCESS);
-    printf("================================================\n");
+    // 5. แสดงตารางสรุปผลลัพธ์
+    printf("\n==================================================\n");
+    printf("                  Summary Report                  \n");
+    printf("==================================================\n");
+    printf("%-8s %-8s %-8s %-12s %-12s %-8s\n", 
+           "Process", "Arrival", "Burst", "Completion", "Turnaround", "Waiting");
+    
+    double total_wt = 0, total_tat = 0;
+    for (int i = 0; i < num_processes; i++) {
+        printf("%-8s %-8d %-8d %-12d %-12d %-8d\n",
+               procs[i].name, procs[i].arrival_time, procs[i].burst_time,
+               procs[i].completion_time, procs[i].turnaround_time, procs[i].waiting_time);
+        total_wt += procs[i].waiting_time;
+        total_tat += procs[i].turnaround_time;
+    }
+    printf("--------------------------------------------------\n");
+    printf("Average Waiting Time: %.2f\n", total_wt / num_processes);
+    printf("Average Turnaround Time: %.2f\n", total_tat / num_processes);
+    printf("==================================================\n");
 
     return 0;
 }
