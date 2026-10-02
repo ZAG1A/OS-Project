@@ -247,7 +247,7 @@ int main() {
     }
     printf("\n0");
     for (int i = 1; i <= timeline_len; i++) {
-        printf("     %-2d", i);
+        printf("    %-2d", i); // ลด Space ตรงหน้า %-2d ลงเหลือ 4 เคาะ
     }
     printf("\n");
 
